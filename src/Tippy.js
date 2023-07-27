@@ -7,7 +7,53 @@ import {
   deepPreserveProps,
 } from './utils';
 import {useMutableBox, useIsomorphicLayoutEffect} from './util-hooks';
-import {classNamePlugin} from './className-plugin';
+
+function updateClassName(box, action, classNames) {
+  classNames.split(/\s+/).forEach(name => {
+    if (name) {
+      box.classList[action](name);
+    }
+  });
+}
+
+const classNamePlugin = {
+  name: 'className',
+  defaultValue: '',
+  fn(instance) {
+    const box = instance.popper.firstElementChild;
+    const isDefaultRenderFn = () => !!instance.props.render?.$$tippy;
+
+    function add() {
+      if (instance.props.className && !isDefaultRenderFn()) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn(
+            [
+              '@tippyjs/react: Cannot use `className` prop in conjunction with',
+              '`render` prop. Place the className on the element you are',
+              'rendering.',
+            ].join(' '),
+          );
+        }
+
+        return;
+      }
+
+      updateClassName(box, 'add', instance.props.className);
+    }
+
+    function remove() {
+      if (isDefaultRenderFn()) {
+        updateClassName(box, 'remove', instance.props.className);
+      }
+    }
+
+    return {
+      onCreate: add,
+      onBeforeUpdate: remove,
+      onAfterUpdate: add,
+    };
+  },
+};
 
 export default function TippyGenerator(tippy) {
   function Tippy({
@@ -105,9 +151,13 @@ export default function TippyGenerator(tippy) {
         element = reference.current;
       }
 
+      const pluginsList = [
+        classNamePlugin,
+        ...(props.plugins || []),
+      ].filter(({fn}) => Boolean(fn));
       const instance = tippy(element || mutableBox.ref || ssrSafeCreateDiv(), {
         ...computedProps,
-        plugins: [classNamePlugin, ...(props.plugins || [])],
+        plugins: pluginsList,
       });
 
       mutableBox.instance = instance;
